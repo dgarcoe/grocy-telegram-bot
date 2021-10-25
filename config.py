@@ -2,11 +2,14 @@ import logging
 
 from container_app_conf import ConfigBase
 from container_app_conf.entry.string import StringConfigEntry
+from container_app_conf.entry.int import IntConfigEntry
 from container_app_conf.source.yaml_source import YamlSource
 
 ROOT = "grocy-telegram-bot"
 
 TELEGRAM = "telegram"
+
+GROCY = "grocy"
 
 class Config(ConfigBase):
 
@@ -26,5 +29,39 @@ class Config(ConfigBase):
             ROOT,
             TELEGRAM,
             "token"
+        ]
+    )
+
+    GROCY_API_KEY = StringConfigEntry(
+        description = "API key used to communicate with Grocy",
+        example = "abcdefgh12345678",
+        secret = True,
+        required = True,
+        key_path = [
+            ROOT,
+            GROCY,
+            "api_key"
+        ]
+    )
+
+    GROCY_HOST = StringConfigEntry(
+        description = "URL to the Grocy host (port not included)",
+        example = "http://127.0.0.1",
+        required = True,
+        key_path = [
+            ROOT,
+            GROCY,
+            "host"
+        ]
+    )
+
+    GROCY_PORT = IntConfigEntry(
+        description = "Grocy port",
+        example = 80,
+        required = True,
+        key_path = [
+            ROOT,
+            GROCY,
+            "port"
         ]
     )

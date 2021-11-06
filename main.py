@@ -2,12 +2,17 @@ import logging
 
 from config import Config
 from bot import Bot
+from grocy import Grocy
+
+import requests
 
 def main():
 
     config = Config()
 
-    bot = Bot(config)
+    grocy = Grocy(config)
+
+    bot = Bot(config, grocy)
     bot.start()
 
 

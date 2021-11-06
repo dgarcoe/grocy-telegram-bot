@@ -1,0 +1,4 @@
+python-telegram-bot
+container_app_conf
+pydantic
+emoji

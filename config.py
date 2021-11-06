@@ -3,6 +3,7 @@ import logging
 from container_app_conf import ConfigBase
 from container_app_conf.entry.string import StringConfigEntry
 from container_app_conf.entry.int import IntConfigEntry
+from container_app_conf.entry.list import ListConfigEntry
 from container_app_conf.source.yaml_source import YamlSource
 
 ROOT = "grocy-telegram-bot"
@@ -29,6 +30,20 @@ class Config(ConfigBase):
             ROOT,
             TELEGRAM,
             "token"
+        ]
+    )
+
+    TELEGRAM_USER_IDS = ListConfigEntry(
+        item_type=IntConfigEntry,
+        key_path=[
+            ROOT,
+            TELEGRAM,
+            "user_ids"
+        ],
+        required=True,
+        example=[
+            123456789,
+            987654321
         ]
     )
 

@@ -30,15 +30,15 @@ class Grocy:
     def get_shopping_list(self):
         shopping_list = []
         shopping_list_json = self._do_get_request("objects/shopping_list")
-        
+
         for object in shopping_list_json:
-            if object['product_id'] != None:
+            if object['product_id'] :
                 product_json = self._do_get_request(urljoin("objects/products/",object['product_id']))
                 product_name = product_json['name']
             else :
                 product_name = object['note']
-            item = ShoppingListItem(product_name=product_name,amount=int(object['amount']),
-                                    done=True if '1' else False)
+            item = ShoppingListItem(product_name=product_name,amount=object['amount'],
+                                    done=object['done'])
             shopping_list.append(item)
 
         return shopping_list

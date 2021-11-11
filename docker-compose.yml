@@ -1,0 +1,10 @@
+version: '3'
+services:
+
+  grocy-telegram-bot:
+    build:
+      context: .
+    restart: always
+    container_name: grocy-telegram-bot
+    volumes:
+      - ./grocy-telegram-bot.yml:/app/grocy-telegram-bot.yml

@@ -7,4 +7,4 @@ services:
     restart: always
     container_name: grocy-telegram-bot
     volumes:
-      - ./grocy-telegram-bot.yml:/app/grocy-telegram-bot.yml
+      - "./grocy-telegram-bot.yml:/app/grocy-telegram-bot.yml"

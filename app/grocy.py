@@ -27,6 +27,17 @@ class Grocy:
         if len(resp.content) > 0:
             return resp.json()
 
+    def _do_post_request(self, end_url: str, param: dict):
+        req_url = urljoin(self._base_url, end_url)
+        resp = requests.post(
+            req_url, headers=self._headers, json=param)
+
+        if resp.status_code >= 400:
+            #raise error
+            print(resp.status_code)
+        if len(resp.content) > 0:
+            return resp.json()
+
     def get_shopping_list(self):
         shopping_list = []
         shopping_list_json = self._do_get_request("objects/shopping_list")

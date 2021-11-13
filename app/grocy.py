@@ -29,6 +29,7 @@ class Grocy:
 
     def _do_post_request(self, end_url: str, param: dict):
         req_url = urljoin(self._base_url, end_url)
+        
         resp = requests.post(
             req_url, headers=self._headers, json=param)
 
@@ -53,3 +54,9 @@ class Grocy:
             shopping_list.append(item)
 
         return shopping_list
+
+    def clear_shopping_list(self):
+
+        param = {"list_id": 1}
+
+        self._do_post_request("stock/shoppinglist/clear", param)

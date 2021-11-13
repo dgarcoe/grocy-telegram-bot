@@ -54,5 +54,7 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query = update.callback_query
         query.answer()
 
+        self._grocy.clear_shopping_list()
+
         query.edit_message_text(
             text="Shopping list cleared")

@@ -22,9 +22,14 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         for item in shopping_list:
             response.append("- {}x {}\n".format(item.amount,item.product_name))
 
+        if not shopping_list :
+            response.append("No items in shopping list\n")
+
         response_text = ''.join(response)
 
         keyboard = [
+            [InlineKeyboardButton(emojize(":plus:"), callback_data='add_shopping'),
+             InlineKeyboardButton(emojize(":check_mark_button:"), callback_data='check_shopping')],
             [InlineKeyboardButton(emojize(":wastebasket:"), callback_data='delete_shopping')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)

@@ -29,7 +29,7 @@ class Grocy:
 
     def _do_post_request(self, end_url: str, param: dict):
         req_url = urljoin(self._base_url, end_url)
-        
+
         resp = requests.post(
             req_url, headers=self._headers, json=param)
 

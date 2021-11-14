@@ -53,6 +53,12 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
         items = update.message.text
 
+        keyboard = [
+            [InlineKeyboardButton("Back", callback_data='shopping')]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         # if we want to match a list of items use this ^([0-9]+ [a-zA-ZÀ-ÿ\u00f1\u00d1]+,?\s*)+$
         if re.match(r"^([0-9]+ [a-zA-ZÀ-ÿ]+)$", items):
             params = items.split()
@@ -63,9 +69,9 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
             self._grocy.add_item_shopping_list(to_add)
 
-            update.message.reply_text('Thank you! {}x of {} added!'.format(amount,item_name))
+            update.message.reply_text('Thank you! {}x of {} added!'.format(amount, item_name),reply_markup=reply_markup)
         else:
-            update.message.reply_text('Format error in item list. Please try again.')
+            update.message.reply_text('Format error in item description. Please try again.',reply_markup=reply_markup)
 
         return ConversationHandler.END
 

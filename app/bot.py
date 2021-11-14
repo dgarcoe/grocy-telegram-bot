@@ -1,12 +1,13 @@
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, ConversationHandler, \
+    MessageHandler, Filters
 from emoji import emojize
+from functools import wraps
 
 from config import Config
 from grocy import Grocy
-from commands.restricted import restricted
 from commands.shopping_list import ShoppingListCommandHandler
 
 class Bot:
@@ -29,6 +30,18 @@ class Bot:
                                                           pattern='^delete_shopping_yes$'))
         self._dispatcher.add_handler(CommandHandler("menu", self.menu_command))
 
+        add_shopping_list_conv_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(self._shopping_list_command_handler.add_shopping
+                                               , pattern='^add_shopping$')],
+            states={
+                self._shopping_list_command_handler.ADD_SHOPPING_ITEMS : [MessageHandler(Filters.text & ~Filters.command,
+                                                                                         self._shopping_list_command_handler.add_shopping_item)]
+            },
+            fallbacks=[CallbackQueryHandler(self._shopping_list_command_handler.shopping
+                                            , pattern='^shopping$')]
+        )
+        self._dispatcher.add_handler(add_shopping_list_conv_handler)
+
         logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level=logging.INFO)
 
@@ -37,6 +50,16 @@ class Bot:
         self._updater.start_polling()
 
         self._updater.idle()
+
+    def restricted(func):
+        @wraps(func)
+        def wrapped(self,update, context, *args, **kwargs):
+            user_id = update.effective_user.id
+            if user_id not in self._config.TELEGRAM_USER_IDS.value:
+                print("Unauthorized access denied for {}.".format(user_id))
+                return
+            return func(self,update, context, *args, **kwargs)
+        return wrapped
 
     @restricted
     def start_command(self, update: Update, context: CallbackContext) -> None:

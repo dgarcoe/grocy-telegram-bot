@@ -1,14 +1,16 @@
+import re
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext
+from telegram.ext import CallbackContext, ConversationHandler
 from emoji import emojize
 
-from .restricted import  restricted
 from . import GrocyCommandHandler
 
 class ShoppingListCommandHandler(GrocyCommandHandler):
 
-    @restricted
-    def shopping(self, update: Update, context: CallbackContext) -> int:
+    ADD_SHOPPING_ITEMS = range(1)
+
+    def shopping(self, update: Update, context: CallbackContext) -> int :
         """Show new choice of buttons"""
         query = update.callback_query
         query.answer()
@@ -37,7 +39,39 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query.edit_message_text(
             text=response_text, reply_markup=reply_markup)
 
-    @restricted
+    def add_shopping(self, update: Update, context: CallbackContext) -> int:
+
+        query = update.callback_query
+        query.answer()
+
+        query.edit_message_text(
+            text="What do you want to add to the list?")
+
+        return self.ADD_SHOPPING_ITEMS
+
+    def add_shopping_item(self, update: Update, context: CallbackContext) -> int:
+
+        items = update.message.text
+
+        # if we want to match a list of items use this ^([0-9]+ [a-zA-ZÀ-ÿ\u00f1\u00d1]+,?\s*)+$
+        if re.match(r"^([0-9]+ [a-zA-ZÀ-ÿ]+)$", items):
+            params = items.split()
+            amount = int(params[0])
+            item_name = params[1]
+
+            to_add = {"amount":amount,"note":item_name}
+
+            self._grocy.add_item_shopping_list(to_add)
+
+            update.message.reply_text('Thank you! {}x of {} added!'.format(amount,item_name))
+        else:
+            update.message.reply_text('Format error in item list. Please try again.')
+
+        return ConversationHandler.END
+
+    def check_shopping(self, update: Update, context: CallbackContext):
+        pass
+
     def delete_shopping(self, update: Update, context: CallbackContext):
 
         query = update.callback_query
@@ -53,7 +87,6 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query.edit_message_text(
             text="Do you really want to clear the whole shopping list?", reply_markup=reply_markup)
 
-    @restricted
     def delete_shopping_yes(self, update: Update, context: CallbackContext):
 
         query = update.callback_query

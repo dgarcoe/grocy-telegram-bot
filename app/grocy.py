@@ -55,6 +55,11 @@ class Grocy:
 
         return shopping_list
 
+    def add_item_shopping_list(self,item: dict):
+
+        self._do_post_request("objects/shopping_list", item)
+
+
     def clear_shopping_list(self):
 
         param = {"list_id": 1}

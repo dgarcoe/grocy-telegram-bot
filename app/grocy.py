@@ -2,7 +2,7 @@ import requests
 
 from urllib.parse import urljoin
 
-from models.shopping_list_item import ShoppingListItem
+from .models.shopping_list_item import ShoppingListItem
 
 
 class Grocy:

@@ -6,9 +6,9 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQuery
 from emoji import emojize
 from functools import wraps
 
-from config import Config
-from grocy import Grocy
-from commands.shopping_list import ShoppingListCommandHandler
+from .config import Config
+from .grocy import Grocy
+from .commands.shopping_list import ShoppingListCommandHandler
 
 class Bot:
 

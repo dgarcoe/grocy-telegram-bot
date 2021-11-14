@@ -1,8 +1,8 @@
 import logging
 
-from config import Config
-from bot import Bot
-from grocy import Grocy
+from app.config import Config
+from app.bot import Bot
+from app.grocy import Grocy
 
 import requests
 

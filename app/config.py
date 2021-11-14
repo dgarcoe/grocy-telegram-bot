@@ -15,7 +15,7 @@ GROCY = "grocy"
 class Config(ConfigBase):
 
     def __new__(cls, *args, **kwargs):
-        yaml_source = YamlSource(ROOT, path=["./config"])
+        yaml_source = YamlSource(ROOT, path=["./app/config"])
         data_sources = [
             yaml_source
         ]

@@ -1,14 +1,14 @@
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, ConversationHandler, \
-    MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, CallbackContext
 from emoji import emojize
 from functools import wraps
 
 from .config import Config
 from .grocy import Grocy
 from .commands.shopping_list import ShoppingListCommandHandler
+
 
 class Bot:
 
@@ -23,31 +23,13 @@ class Bot:
 
         self._dispatcher.add_handler(CommandHandler("start", self.start_command))
         self._dispatcher.add_handler(CommandHandler("help", self.help_command))
-        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.shopping, pattern='^shopping$'))
-        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.delete_shopping,
-                                                          pattern='^delete_shopping$'))
-        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.delete_shopping_yes,
-                                                          pattern='^delete_shopping_yes$'))
-        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.check_shopping,
-                                                          pattern='^check_shopping$'))
-        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.check_shopping_item,
-                                                          pattern='^check_shopping_item:\d+$'))
         self._dispatcher.add_handler(CommandHandler("menu", self.menu_command))
 
-        add_shopping_list_conv_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(self._shopping_list_command_handler.add_shopping
-                                               , pattern='^add_shopping$')],
-            states={
-                self._shopping_list_command_handler.ADD_SHOPPING_ITEMS: [MessageHandler(Filters.text & ~Filters.command,
-                                                                self._shopping_list_command_handler.add_shopping_item)]
-            },
-            fallbacks=[CallbackQueryHandler(self._shopping_list_command_handler.shopping
-                                            , pattern='^shopping$')]
-        )
-        self._dispatcher.add_handler(add_shopping_list_conv_handler)
+        for handler in self._shopping_list_command_handler.handlers():
+            self._dispatcher.add_handler(handler)
 
-        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                     level=logging.INFO)
+        logging.basicConfig(level=logging.INFO,
+                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     def start(self):
 
@@ -67,16 +49,21 @@ class Bot:
 
     @restricted
     def start_command(self, update: Update, context: CallbackContext) -> None:
-        """Send a message when the command /start is issued."""
         user = update.effective_user
         update.message.reply_markdown_v2(
-            fr'Hi {user.mention_markdown_v2()}\!'
+            fr'Hi {user.mention_markdown_v2()}\! Welcome to Grocy Telegram Bot\. Please use the /help command to check'
+            fr' all the available options\.'
         )
 
     @restricted
     def help_command(self, update: Update, context: CallbackContext) -> None:
-        """Send a message when the command /help is issued."""
-        update.message.reply_text('Help!')
+        update.message.reply_text('List of commands:\n'
+                                  '/menu: Show the main menu with all the available options.\n\n'
+                                  'List of options in main menu:\n'
+                                  '-Shopping List: Shows the shopping list.\n '
+                                  '\t*Use the plus button to add a new item as "quantity item". Eg. 2 bottles.\n'
+                                  '\t*Use the check button to check items from the list.\n'
+                                  '\t*Delete the whole list by pressing the basket button.')
 
     @restricted
     def menu_command(self, update: Update, context: CallbackContext) -> None:

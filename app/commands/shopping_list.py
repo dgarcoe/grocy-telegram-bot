@@ -1,7 +1,7 @@
 import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, ConversationHandler
+from telegram.ext import CallbackContext, ConversationHandler, CallbackQueryHandler, MessageHandler, Filters
 from emoji import emojize
 
 from . import GrocyCommandHandler
@@ -10,6 +10,22 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
     ADD_SHOPPING_ITEMS = range(1)
     shopping_list = []
+
+    def handlers(self):
+        return [
+            CallbackQueryHandler(self.shopping, pattern='^shopping$'),
+            CallbackQueryHandler(self.delete_shopping, pattern='^delete_shopping$'),
+            CallbackQueryHandler(self.delete_shopping_yes, pattern='^delete_shopping_yes$'),
+            CallbackQueryHandler(self.check_shopping, pattern='^check_shopping$'),
+            CallbackQueryHandler(self.check_shopping_item, pattern='^check_shopping_item:\d+$'),
+            ConversationHandler(
+                entry_points=[CallbackQueryHandler(self.add_shopping, pattern='^add_shopping$')],
+                states={
+                    self.ADD_SHOPPING_ITEMS: [MessageHandler(Filters.text & ~Filters.command, self.add_shopping_item)]
+                },
+                fallbacks=[CallbackQueryHandler(self.shopping, pattern='^shopping$')]
+            )
+        ]
 
     def shopping(self, update: Update, context: CallbackContext) :
         """Show new choice of buttons"""
@@ -63,8 +79,8 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         # if we want to match a list of items use this ^([0-9]+ [a-zA-ZÀ-ÿ\u00f1\u00d1]+,?\s*)+$
-        if re.match(r"^([0-9]+ [a-zA-ZÀ-ÿ]+)$", items):
-            params = items.split()
+        if re.match(r"^([0-9]+ [ a-zA-ZÀ-ÿ]+)$", items):
+            params = items.split(" ", 1)
             amount = int(params[0])
             item_name = params[1]
 

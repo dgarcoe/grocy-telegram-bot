@@ -1,10 +1,6 @@
-import logging
-
 from app.config import Config
 from app.bot import Bot
 from app.grocy import Grocy
-
-import requests
 
 def main():
 

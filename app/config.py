@@ -1,5 +1,3 @@
-import logging
-
 from container_app_conf import ConfigBase
 from container_app_conf.entry.string import StringConfigEntry
 from container_app_conf.entry.int import IntConfigEntry

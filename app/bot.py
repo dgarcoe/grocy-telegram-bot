@@ -28,14 +28,18 @@ class Bot:
                                                           pattern='^delete_shopping$'))
         self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.delete_shopping_yes,
                                                           pattern='^delete_shopping_yes$'))
+        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.check_shopping,
+                                                          pattern='^check_shopping$'))
+        self._dispatcher.add_handler(CallbackQueryHandler(self._shopping_list_command_handler.check_shopping_item,
+                                                          pattern='^check_shopping_item:\d+$'))
         self._dispatcher.add_handler(CommandHandler("menu", self.menu_command))
 
         add_shopping_list_conv_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(self._shopping_list_command_handler.add_shopping
                                                , pattern='^add_shopping$')],
             states={
-                self._shopping_list_command_handler.ADD_SHOPPING_ITEMS : [MessageHandler(Filters.text & ~Filters.command,
-                                                                                         self._shopping_list_command_handler.add_shopping_item)]
+                self._shopping_list_command_handler.ADD_SHOPPING_ITEMS: [MessageHandler(Filters.text & ~Filters.command,
+                                                                self._shopping_list_command_handler.add_shopping_item)]
             },
             fallbacks=[CallbackQueryHandler(self._shopping_list_command_handler.shopping
                                             , pattern='^shopping$')]
@@ -58,7 +62,7 @@ class Bot:
             if user_id not in self._config.TELEGRAM_USER_IDS.value:
                 print("Unauthorized access denied for {}.".format(user_id))
                 return
-            return func(self,update, context, *args, **kwargs)
+            return func(self, update, context, *args, **kwargs)
         return wrapped
 
     @restricted

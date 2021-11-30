@@ -28,10 +28,24 @@ class Grocy:
             return resp.json()
 
     def _do_post_request(self, end_url: str, param: dict):
+
         req_url = urljoin(self._base_url, end_url)
 
         resp = requests.post(
             req_url, headers=self._headers, json=param)
+
+        if resp.status_code >= 400:
+            #raise error
+            print(resp.status_code)
+        if len(resp.content) > 0:
+            return resp.json()
+
+    def _do_put_request(self, end_url: str, data):
+
+        req_url = urljoin(self._base_url, end_url)
+
+        resp = requests.put(
+            req_url, headers=self._headers, data=data)
 
         if resp.status_code >= 400:
             #raise error
@@ -49,7 +63,7 @@ class Grocy:
                 product_name = product_json['name']
             else :
                 product_name = object['note']
-            item = ShoppingListItem(product_name=product_name,amount=object['amount'],
+            item = ShoppingListItem(id=object['id'], product_name=product_name, amount=object['amount'],
                                     done=object['done'])
             shopping_list.append(item)
 
@@ -59,9 +73,14 @@ class Grocy:
 
         self._do_post_request("objects/shopping_list", item)
 
-
     def clear_shopping_list(self):
 
         param = {"list_id": 1}
 
         self._do_post_request("stock/shoppinglist/clear", param)
+
+    def mark_item_done_shopping_list(self, item_id: str):
+
+        param = {"done": "1"}
+
+        self._do_put_request("objects/shopping_list/"+item_id, param)

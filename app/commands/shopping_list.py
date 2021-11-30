@@ -9,8 +9,9 @@ from . import GrocyCommandHandler
 class ShoppingListCommandHandler(GrocyCommandHandler):
 
     ADD_SHOPPING_ITEMS = range(1)
+    shopping_list = []
 
-    def shopping(self, update: Update, context: CallbackContext) -> int :
+    def shopping(self, update: Update, context: CallbackContext) :
         """Show new choice of buttons"""
         query = update.callback_query
         query.answer()
@@ -18,13 +19,15 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query.edit_message_text(
             text="Please wait while getting items...")
 
-        shopping_list = self._grocy.get_shopping_list()
+        self.shopping_list = self._grocy.get_shopping_list()
 
         response = [emojize(":shopping_cart: Shopping List\n\n")]
-        for item in shopping_list:
-            response.append("- {}x {}\n".format(item.amount,item.product_name))
+        for item in self.shopping_list:
+            item_description = self.strike("- {}x {}".format(item.amount, item.product_name))+"\n" if item.done else \
+                "- {}x {}\n".format(item.amount,item.product_name)
+            response.append(item_description)
 
-        if not shopping_list :
+        if not self.shopping_list :
             response.append("No items in shopping list\n")
 
         response_text = ''.join(response)
@@ -76,7 +79,45 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         return ConversationHandler.END
 
     def check_shopping(self, update: Update, context: CallbackContext):
-        pass
+
+        query = update.callback_query
+        query.answer()
+
+        keyboard = []
+
+        message = "Check items from the list:"
+        counter = 0
+        for item in self.shopping_list:
+            if not item.done:
+                button = [InlineKeyboardButton(item.product_name, callback_data='check_shopping_item:{}'.format(item.id))]
+                keyboard.append(button)
+                counter += 1
+
+        if not counter:
+            message = "No items to check"
+
+        keyboard.append([InlineKeyboardButton("Back", callback_data='shopping')])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        query.edit_message_text(
+            text=message, reply_markup=reply_markup)
+
+    def check_shopping_item(self, update: Update, context: CallbackContext):
+
+        query = update.callback_query
+        query.answer()
+
+        keyboard = []
+        keyboard.append([InlineKeyboardButton("Back", callback_data='shopping')])
+
+        item_id = update.callback_query.data.split(":")[1]
+        self._grocy.mark_item_done_shopping_list(item_id)
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        query.edit_message_text(
+            text="Item checked!", reply_markup=reply_markup)
 
     def delete_shopping(self, update: Update, context: CallbackContext):
 
@@ -102,3 +143,9 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
         query.edit_message_text(
             text="Shopping list cleared")
+
+    def strike(self,text):
+        result = ''
+        for c in text:
+            result = result + c + '\u0336'
+        return result

@@ -21,8 +21,7 @@ class Grocy:
         resp = requests.get(req_url, headers=self._headers)
 
         if resp.status_code >= 400:
-            #raise error
-            print(resp.status_code)
+            raise Exception("Error doing GET request: {}".format(resp.status_code))
 
         if len(resp.content) > 0:
             return resp.json()
@@ -35,8 +34,7 @@ class Grocy:
             req_url, headers=self._headers, json=param)
 
         if resp.status_code >= 400:
-            #raise error
-            print(resp.status_code)
+            raise Exception("Error doing POST request: {}".format(resp.status_code))
         if len(resp.content) > 0:
             return resp.json()
 
@@ -48,8 +46,7 @@ class Grocy:
             req_url, headers=self._headers, data=data)
 
         if resp.status_code >= 400:
-            #raise error
-            print(resp.status_code)
+            raise Exception("Error doing PUT request: {}".format(resp.status_code))
         if len(resp.content) > 0:
             return resp.json()
 

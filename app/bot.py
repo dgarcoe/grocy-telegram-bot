@@ -8,6 +8,7 @@ from functools import wraps
 from .config import Config
 from .grocy import Grocy
 from .commands.shopping_list import ShoppingListCommandHandler
+from .commands.house_chores import HouseChoresCommandHandler
 
 
 class Bot:
@@ -17,6 +18,7 @@ class Bot:
         self._config = config
         self._grocy = grocy
         self._shopping_list_command_handler = ShoppingListCommandHandler(self._config, self._grocy)
+        self._house_chores_command_handler = HouseChoresCommandHandler(self._config, self._grocy)
 
         self._updater = Updater(self._config.TELEGRAM_BOT_TOKEN.value)
         self._dispatcher = self._updater.dispatcher
@@ -26,6 +28,9 @@ class Bot:
         self._dispatcher.add_handler(CommandHandler("menu", self.menu_command))
 
         for handler in self._shopping_list_command_handler.handlers():
+            self._dispatcher.add_handler(handler)
+
+        for handler in self._house_chores_command_handler.handlers():
             self._dispatcher.add_handler(handler)
 
         logging.basicConfig(level=logging.INFO,
@@ -69,7 +74,8 @@ class Bot:
     def menu_command(self, update: Update, context: CallbackContext) -> None:
         """Sends a message with three inline buttons attached."""
         keyboard = [
-            [InlineKeyboardButton(emojize(":shopping_cart: Shopping List"), callback_data='shopping')]
+            [InlineKeyboardButton(emojize(":shopping_cart: Shopping List"), callback_data='shopping')],
+            [InlineKeyboardButton(emojize(":broom: House Chores"), callback_data='chores')]
             ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)

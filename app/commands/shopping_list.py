@@ -28,7 +28,7 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         ]
 
     def shopping(self, update: Update, context: CallbackContext) :
-        """Show new choice of buttons"""
+
         query = update.callback_query
         query.answer()
 

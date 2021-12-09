@@ -23,7 +23,8 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
                 states={
                     self.ADD_SHOPPING_ITEMS: [MessageHandler(Filters.text & ~Filters.command, self.add_shopping_item)]
                 },
-                fallbacks=[CallbackQueryHandler(self.shopping, pattern='^shopping$')]
+                fallbacks=[MessageHandler(Filters.command, self.cancel_add_shopping_item)],
+                allow_reentry=True
             )
         ]
 
@@ -92,6 +93,10 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         else:
             update.message.reply_text('Format error in item description. Please try again.',reply_markup=reply_markup)
 
+        return ConversationHandler.END
+
+    def cancel_add_shopping_item(self, update: Update, context: CallbackContext):
+        print("WEEEE")
         return ConversationHandler.END
 
     def check_shopping(self, update: Update, context: CallbackContext):

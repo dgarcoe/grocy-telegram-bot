@@ -91,12 +91,11 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
             update.message.reply_text('Thank you! {}x of {} added!'.format(amount, item_name),reply_markup=reply_markup)
         else:
-            update.message.reply_text('Format error in item description. Please try again.',reply_markup=reply_markup)
+            update.message.reply_text('Format error in item description. Please try again.', reply_markup=reply_markup)
 
         return ConversationHandler.END
 
     def cancel_add_shopping_item(self, update: Update, context: CallbackContext):
-        print("WEEEE")
         return ConversationHandler.END
 
     def check_shopping(self, update: Update, context: CallbackContext):
@@ -165,8 +164,5 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query.edit_message_text(
             text="Shopping list cleared")
 
-    def strike(self,text):
-        result = ''
-        for c in text:
-            result = result + c + '\u0336'
-        return result
+    def strike(self, text):
+        return emojize(":check_mark_button:")+text.replace("-","")

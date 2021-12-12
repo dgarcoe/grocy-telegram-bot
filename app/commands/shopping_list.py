@@ -17,7 +17,7 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
             CallbackQueryHandler(self.delete_shopping, pattern='^delete_shopping$'),
             CallbackQueryHandler(self.delete_shopping_yes, pattern='^delete_shopping_yes$'),
             CallbackQueryHandler(self.check_shopping, pattern='^check_shopping$'),
-            CallbackQueryHandler(self.check_shopping_item, pattern='^check_shopping_item:\d+$'),
+            CallbackQueryHandler(self.check_shopping_item, pattern='^check_shopping_item:\d+:\d+$'),
             ConversationHandler(
                 entry_points=[CallbackQueryHandler(self.add_shopping, pattern='^add_shopping$')],
                 states={
@@ -107,9 +107,9 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
 
         message = "Check items from the list:"
         counter = 0
-        for item in self.shopping_list:
+        for index, item in enumerate(self.shopping_list):
             if not item.done:
-                button = [InlineKeyboardButton(item.product_name, callback_data='check_shopping_item:{}'.format(item.id))]
+                button = [InlineKeyboardButton(item.product_name, callback_data='check_shopping_item:{}:{}'.format(index,item.id))]
                 keyboard.append(button)
                 counter += 1
 
@@ -129,9 +129,11 @@ class ShoppingListCommandHandler(GrocyCommandHandler):
         query.answer()
 
         keyboard = []
-        keyboard.append([InlineKeyboardButton("Back", callback_data='shopping')])
+        keyboard.append([InlineKeyboardButton("Back", callback_data='check_shopping')])
 
-        item_id = update.callback_query.data.split(":")[1]
+        item_index = update.callback_query.data.split(":")[1]
+        item_id = update.callback_query.data.split(":")[2]
+        self.shopping_list[int(item_index)].done = True
         self._grocy.mark_item_done_shopping_list(item_id)
 
         reply_markup = InlineKeyboardMarkup(keyboard)

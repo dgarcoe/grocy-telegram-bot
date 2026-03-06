@@ -7,8 +7,10 @@ from functools import wraps
 
 from .config import Config
 from .grocy import Grocy
+from .expenses import ExpenseTracker
 from .commands.shopping_list import ShoppingListCommandHandler
 from .commands.house_chores import HouseChoresCommandHandler
+from .commands.expenses import ExpensesCommandHandler
 
 
 class Bot:
@@ -19,6 +21,8 @@ class Bot:
         self._grocy = grocy
         self._shopping_list_command_handler = ShoppingListCommandHandler(self._config, self._grocy)
         self._house_chores_command_handler = HouseChoresCommandHandler(self._config, self._grocy)
+        self._expense_tracker = ExpenseTracker(self._config)
+        self._expenses_command_handler = ExpensesCommandHandler(self._config, self._expense_tracker)
 
         self._updater = Updater(self._config.TELEGRAM_BOT_TOKEN.value)
         self._dispatcher = self._updater.dispatcher
@@ -31,6 +35,9 @@ class Bot:
             self._dispatcher.add_handler(handler)
 
         for handler in self._house_chores_command_handler.handlers():
+            self._dispatcher.add_handler(handler)
+
+        for handler in self._expenses_command_handler.handlers():
             self._dispatcher.add_handler(handler)
 
         logging.basicConfig(level=logging.INFO,
@@ -75,7 +82,8 @@ class Bot:
         """Sends a message with three inline buttons attached."""
         keyboard = [
             [InlineKeyboardButton(emojize(":shopping_cart: Shopping List"), callback_data='shopping')],
-            [InlineKeyboardButton(emojize(":broom: House Chores"), callback_data='chores')]
+            [InlineKeyboardButton(emojize(":broom: House Chores"),          callback_data='chores')],
+            [InlineKeyboardButton(emojize(":money_bag: Expenses"),          callback_data='expenses')],
             ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)

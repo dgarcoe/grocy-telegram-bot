@@ -10,6 +10,8 @@ TELEGRAM = "telegram"
 
 GROCY = "grocy"
 
+EXPENSES = "expenses"
+
 class Config(ConfigBase):
 
     def __new__(cls, *args, **kwargs):
@@ -77,4 +79,18 @@ class Config(ConfigBase):
             GROCY,
             "port"
         ]
+    )
+
+    EXPENSES_MEMBERS = ListConfigEntry(
+        item_type=StringConfigEntry,
+        key_path=[ROOT, EXPENSES, "members"],
+        required=False,
+        example=["Alice", "Bob", "Carol"]
+    )
+
+    EXPENSES_DB_PATH = StringConfigEntry(
+        description="Path to the SQLite database file for expense tracking",
+        example="./expenses.db",
+        required=False,
+        key_path=[ROOT, EXPENSES, "db_path"]
     )

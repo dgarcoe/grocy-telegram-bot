@@ -1,0 +1,17 @@
+grocy-telegram-bot:
+  telegram:
+    token: "YOUR_TELEGRAM_BOT_TOKEN"
+    user_ids:
+      - 123456789
+
+  grocy:
+    api_key: "YOUR_GROCY_API_KEY"
+    host: "http://127.0.0.1"
+    port: 9283
+
+  expenses:
+    db_path: "./expenses.db"
+    members:
+      - Alice
+      - Bob
+      - Carol

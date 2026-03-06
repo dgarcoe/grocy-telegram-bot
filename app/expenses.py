@@ -61,7 +61,75 @@ class ExpenseTracker:
             conn.commit()
         return expense_id
 
-    def add_settlement(self, paid_by: str, paid_to: str, amount: float) -> int:
+    def list_expenses(self, limit: int = 10) -> List["Expense"]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT id, description, amount, paid_by, created_at FROM expenses ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            result = []
+            for row in rows:
+                participants = [p["member"] for p in conn.execute(
+                    "SELECT member FROM expense_participants WHERE expense_id = ?", (row["id"],)
+                ).fetchall()]
+                result.append(Expense(
+                    id=row["id"], description=row["description"], amount=row["amount"],
+                    paid_by=row["paid_by"], participants=participants, created_at=row["created_at"]
+                ))
+            return result
+
+    def get_expense(self, expense_id: int):
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT id, description, amount, paid_by, created_at FROM expenses WHERE id = ?",
+                (expense_id,)
+            ).fetchone()
+            if not row:
+                return None
+            participants = [p["member"] for p in conn.execute(
+                "SELECT member FROM expense_participants WHERE expense_id = ?", (expense_id,)
+            ).fetchall()]
+            return Expense(
+                id=row["id"], description=row["description"], amount=row["amount"],
+                paid_by=row["paid_by"], participants=participants, created_at=row["created_at"]
+            )
+
+    def update_expense(self, expense_id: int, description: str, amount: float, paid_by: str, participants: List[str]) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE expenses SET description=?, amount=?, paid_by=? WHERE id=?",
+                (description, amount, paid_by, expense_id)
+            )
+            conn.execute("DELETE FROM expense_participants WHERE expense_id=?", (expense_id,))
+            conn.executemany(
+                "INSERT INTO expense_participants (expense_id, member) VALUES (?, ?)",
+                [(expense_id, m) for m in participants]
+            )
+            conn.commit()
+
+    def delete_expense(self, expense_id: int) -> None:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM expense_participants WHERE expense_id=?", (expense_id,))
+            conn.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+            conn.commit()
+
+    def list_settlements(self, limit: int = 10) -> List["Settlement"]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT id, paid_by, paid_to, amount, created_at FROM settlements ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            return [Settlement(
+                id=row["id"], paid_by=row["paid_by"], paid_to=row["paid_to"],
+                amount=row["amount"], created_at=row["created_at"]
+            ) for row in rows]
+
+    def delete_settlement(self, settlement_id: int) -> None:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM settlements WHERE id=?", (settlement_id,))
+            conn.commit()
+
+
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
             cursor = conn.execute(

@@ -17,6 +17,14 @@ from app.expenses import ExpenseTracker
 # Settle Up conversation states
 (SETTLE_ASK_PAYER, SETTLE_ASK_RECEIVER, SETTLE_ASK_AMOUNT) = range(3)
 
+# Manage Expenses conversation states
+(MANAGE_EXP_LIST, MANAGE_EXP_ACTION,
+ MANAGE_EXP_EDIT_DESC, MANAGE_EXP_EDIT_AMT,
+ MANAGE_EXP_EDIT_PAYER, MANAGE_EXP_EDIT_PARTS) = range(6)
+
+# Manage Settlements conversation states
+(MANAGE_SET_LIST,) = range(1)
+
 # context.user_data keys
 CONTEXT_DESCRIPTION  = "exp_description"
 CONTEXT_AMOUNT       = "exp_amount"
@@ -24,6 +32,7 @@ CONTEXT_PAYER        = "exp_payer"
 CONTEXT_PARTICIPANTS = "exp_participants"
 CONTEXT_SETTLE_PAYER = "settle_payer"
 CONTEXT_SETTLE_TO    = "settle_to"
+CONTEXT_EDIT_ID      = "edit_expense_id"
 
 
 class ExpensesCommandHandler:
@@ -40,6 +49,7 @@ class ExpensesCommandHandler:
         return [
             CallbackQueryHandler(self.expenses_menu, pattern='^expenses$'),
             CallbackQueryHandler(self.view_balances, pattern='^view_balances$'),
+            CallbackQueryHandler(self.noop, pattern='^noop$'),
 
             ConversationHandler(
                 entry_points=[CallbackQueryHandler(self.add_expense_start, pattern='^add_expense$')],
@@ -78,6 +88,46 @@ class ExpensesCommandHandler:
                 fallbacks=[MessageHandler(Filters.command, self.cancel_settle)],
                 allow_reentry=True
             ),
+
+            ConversationHandler(
+                entry_points=[CallbackQueryHandler(self.manage_expenses_start, pattern='^manage_expenses$')],
+                states={
+                    MANAGE_EXP_LIST: [
+                        CallbackQueryHandler(self.manage_expense_select, pattern=r'^mexp_select:\d+$'),
+                    ],
+                    MANAGE_EXP_ACTION: [
+                        CallbackQueryHandler(self.manage_expense_delete, pattern=r'^mexp_delete:\d+$'),
+                        CallbackQueryHandler(self.manage_expense_edit_start, pattern=r'^mexp_edit:\d+$'),
+                        CallbackQueryHandler(self.manage_expenses_start, pattern='^manage_expenses$'),
+                    ],
+                    MANAGE_EXP_EDIT_DESC: [
+                        MessageHandler(Filters.text & ~Filters.command, self.manage_expense_edit_description),
+                    ],
+                    MANAGE_EXP_EDIT_AMT: [
+                        MessageHandler(Filters.text & ~Filters.command, self.manage_expense_edit_amount),
+                    ],
+                    MANAGE_EXP_EDIT_PAYER: [
+                        CallbackQueryHandler(self.manage_expense_edit_payer, pattern='^mexp_payer:.+$'),
+                    ],
+                    MANAGE_EXP_EDIT_PARTS: [
+                        CallbackQueryHandler(self.manage_expense_edit_toggle, pattern='^mexp_toggle:.+$'),
+                        CallbackQueryHandler(self.manage_expense_edit_done, pattern='^mexp_parts_done$'),
+                    ],
+                },
+                fallbacks=[MessageHandler(Filters.command, self.cancel_manage_expense)],
+                allow_reentry=True
+            ),
+
+            ConversationHandler(
+                entry_points=[CallbackQueryHandler(self.manage_settlements_start, pattern='^manage_settlements$')],
+                states={
+                    MANAGE_SET_LIST: [
+                        CallbackQueryHandler(self.manage_settlement_delete, pattern=r'^mset_delete:\d+$'),
+                    ],
+                },
+                fallbacks=[],
+                allow_reentry=True
+            ),
         ]
 
     # ── Expenses menu ─────────────────────────────────────────────────────────
@@ -86,14 +136,19 @@ class ExpensesCommandHandler:
         query = update.callback_query
         query.answer()
         keyboard = [
-            [InlineKeyboardButton(emojize(":bar_chart: View Balances"), callback_data='view_balances')],
-            [InlineKeyboardButton(emojize(":plus: Add Expense"),        callback_data='add_expense')],
-            [InlineKeyboardButton(emojize(":handshake: Settle Up"),     callback_data='settle_up')],
+            [InlineKeyboardButton(emojize(":bar_chart: View Balances"),      callback_data='view_balances')],
+            [InlineKeyboardButton(emojize(":plus: Add Expense"),             callback_data='add_expense')],
+            [InlineKeyboardButton(emojize(":handshake: Settle Up"),          callback_data='settle_up')],
+            [InlineKeyboardButton(emojize(":pencil: Manage Expenses"),       callback_data='manage_expenses')],
+            [InlineKeyboardButton(emojize(":wastebasket: Delete Settlement"), callback_data='manage_settlements')],
         ]
         query.edit_message_text(
             text=emojize(":money_bag: Expenses"),
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+    def noop(self, update: Update, context: CallbackContext) -> None:
+        update.callback_query.answer()
 
     # ── View Balances ─────────────────────────────────────────────────────────
 
@@ -197,16 +252,16 @@ class ExpensesCommandHandler:
             return ASK_PARTICIPANTS
         query.answer()
 
-        description      = context.user_data[CONTEXT_DESCRIPTION]
-        amount           = context.user_data[CONTEXT_AMOUNT]
-        payer            = context.user_data[CONTEXT_PAYER]
+        description       = context.user_data[CONTEXT_DESCRIPTION]
+        amount            = context.user_data[CONTEXT_AMOUNT]
+        payer             = context.user_data[CONTEXT_PAYER]
         participants_list = sorted(selected)
 
         self._tracker.add_expense(description, amount, payer, participants_list)
 
         share = amount / len(participants_list)
         summary = "\n".join([
-            emojize(f":check_mark_button: Expense saved!"),
+            emojize(":check_mark_button: Expense saved!"),
             f"Description: {description}",
             f"Amount: \u20ac{amount:.2f}",
             f"Paid by: {payer}",
@@ -286,3 +341,193 @@ class ExpensesCommandHandler:
     def cancel_settle(self, update: Update, context: CallbackContext) -> int:
         update.message.reply_text("Settlement cancelled.")
         return ConversationHandler.END
+
+    # ── Manage Expenses ───────────────────────────────────────────────────────
+
+    def manage_expenses_start(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        expenses = self._tracker.list_expenses()
+        if not expenses:
+            keyboard = [[InlineKeyboardButton("Back", callback_data='expenses')]]
+            query.edit_message_text(text="No expenses recorded yet.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+        keyboard = [
+            [InlineKeyboardButton(f"{e.description} \u20ac{e.amount:.2f}", callback_data=f'mexp_select:{e.id}')]
+            for e in expenses
+        ]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='expenses')])
+        query.edit_message_text(
+            text="Select an expense to edit or delete:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return MANAGE_EXP_LIST
+
+    def manage_expense_select(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        expense_id = int(query.data.split(":", 1)[1])
+        exp = self._tracker.get_expense(expense_id)
+        if not exp:
+            query.edit_message_text("Expense not found.")
+            return ConversationHandler.END
+        share = exp.amount / len(exp.participants) if exp.participants else 0
+        text = "\n".join([
+            f"Description: {exp.description}",
+            f"Amount: \u20ac{exp.amount:.2f}",
+            f"Paid by: {exp.paid_by}",
+            f"Participants: {', '.join(exp.participants)}",
+            f"Each owes: \u20ac{share:.2f}",
+        ])
+        keyboard = [
+            [
+                InlineKeyboardButton("Edit",   callback_data=f'mexp_edit:{expense_id}'),
+                InlineKeyboardButton("Delete", callback_data=f'mexp_delete:{expense_id}'),
+            ],
+            [InlineKeyboardButton("Back", callback_data='manage_expenses')],
+        ]
+        query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return MANAGE_EXP_ACTION
+
+    def manage_expense_delete(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        expense_id = int(query.data.split(":", 1)[1])
+        exp = self._tracker.get_expense(expense_id)
+        self._tracker.delete_expense(expense_id)
+        desc = exp.description if exp else f"#{expense_id}"
+        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
+        query.edit_message_text(
+            text=emojize(f":wastebasket: Expense '{desc}' deleted."),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+
+    def manage_expense_edit_start(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        expense_id = int(query.data.split(":", 1)[1])
+        context.user_data[CONTEXT_EDIT_ID] = expense_id
+        exp = self._tracker.get_expense(expense_id)
+        context.user_data[CONTEXT_PARTICIPANTS] = set(exp.participants) if exp else set()
+        query.edit_message_text(
+            text=f"Editing: {exp.description}\n\nNew description:"
+        )
+        return MANAGE_EXP_EDIT_DESC
+
+    def manage_expense_edit_description(self, update: Update, context: CallbackContext) -> int:
+        context.user_data[CONTEXT_DESCRIPTION] = update.message.text.strip()
+        update.message.reply_text("New amount? (e.g. 24.50)")
+        return MANAGE_EXP_EDIT_AMT
+
+    def manage_expense_edit_amount(self, update: Update, context: CallbackContext) -> int:
+        try:
+            amount = float(update.message.text.strip().replace(",", "."))
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            update.message.reply_text("Please enter a valid positive number.")
+            return MANAGE_EXP_EDIT_AMT
+        context.user_data[CONTEXT_AMOUNT] = amount
+        keyboard = [
+            [InlineKeyboardButton(m, callback_data=f'mexp_payer:{m}')]
+            for m in self._members
+        ]
+        update.message.reply_text("Who paid?", reply_markup=InlineKeyboardMarkup(keyboard))
+        return MANAGE_EXP_EDIT_PAYER
+
+    def manage_expense_edit_payer(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        context.user_data[CONTEXT_PAYER] = query.data.split(":", 1)[1]
+        return self._show_edit_participant_selector(query, context)
+
+    def _show_edit_participant_selector(self, query, context: CallbackContext) -> int:
+        selected: set = context.user_data.get(CONTEXT_PARTICIPANTS, set())
+        keyboard = []
+        for m in self._members:
+            label = f"[x] {m}" if m in selected else f"[ ] {m}"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f'mexp_toggle:{m}')])
+        keyboard.append([InlineKeyboardButton("Done", callback_data='mexp_parts_done')])
+        query.edit_message_text(
+            text="Who participated? (tap to toggle, then press Done)",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return MANAGE_EXP_EDIT_PARTS
+
+    def manage_expense_edit_toggle(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        member = query.data.split(":", 1)[1]
+        selected: set = context.user_data.setdefault(CONTEXT_PARTICIPANTS, set())
+        if member in selected:
+            selected.discard(member)
+        else:
+            selected.add(member)
+        return self._show_edit_participant_selector(query, context)
+
+    def manage_expense_edit_done(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        selected: set = context.user_data.get(CONTEXT_PARTICIPANTS, set())
+        if not selected:
+            query.answer(text="Please select at least one participant.", show_alert=True)
+            return MANAGE_EXP_EDIT_PARTS
+        query.answer()
+        expense_id   = context.user_data[CONTEXT_EDIT_ID]
+        description  = context.user_data[CONTEXT_DESCRIPTION]
+        amount       = context.user_data[CONTEXT_AMOUNT]
+        payer        = context.user_data[CONTEXT_PAYER]
+        participants = sorted(selected)
+        self._tracker.update_expense(expense_id, description, amount, payer, participants)
+        share = amount / len(participants)
+        summary = "\n".join([
+            emojize(":check_mark_button: Expense updated!"),
+            f"Description: {description}",
+            f"Amount: \u20ac{amount:.2f}",
+            f"Paid by: {payer}",
+            f"Participants: {', '.join(participants)}",
+            f"Each owes: \u20ac{share:.2f}",
+        ])
+        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
+        query.edit_message_text(text=summary, reply_markup=InlineKeyboardMarkup(keyboard))
+        return ConversationHandler.END
+
+    def cancel_manage_expense(self, update: Update, context: CallbackContext) -> int:
+        update.message.reply_text("Cancelled.")
+        return ConversationHandler.END
+
+    # ── Manage Settlements ────────────────────────────────────────────────────
+
+    def manage_settlements_start(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        return self._show_settlements_list(query)
+
+    def _show_settlements_list(self, query, deleted_msg: str = None) -> int:
+        settlements = self._tracker.list_settlements()
+        if not settlements:
+            text = emojize(":wastebasket: Deleted. No more settlements.") if deleted_msg else "No settlements recorded yet."
+            keyboard = [[InlineKeyboardButton("Back", callback_data='expenses')]]
+            query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"{s.paid_by} \u2192 {s.paid_to} \u20ac{s.amount:.2f}",
+                    callback_data='noop'
+                ),
+                InlineKeyboardButton(emojize(":wastebasket:"), callback_data=f'mset_delete:{s.id}'),
+            ]
+            for s in settlements
+        ]
+        keyboard.append([InlineKeyboardButton("Back", callback_data='expenses')])
+        text = emojize(":wastebasket: Deleted. Remaining:") if deleted_msg else "Tap the trash icon to delete a settlement:"
+        query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return MANAGE_SET_LIST
+
+    def manage_settlement_delete(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        settlement_id = int(query.data.split(":", 1)[1])
+        self._tracker.delete_settlement(settlement_id)
+        return self._show_settlements_list(query, deleted_msg=True)

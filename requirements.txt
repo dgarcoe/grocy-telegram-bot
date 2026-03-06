@@ -1,6 +1,6 @@
 requests
 python-telegram-bot
-container_app_conf
+container_app_conf==4.2.3
 ruamel.yaml
 pydantic
 emoji

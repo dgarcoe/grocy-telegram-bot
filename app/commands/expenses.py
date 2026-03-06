@@ -12,10 +12,10 @@ from app.config import Config
 from app.expenses import ExpenseTracker
 
 # Add Expense conversation states
-(ASK_DESCRIPTION, ASK_AMOUNT, ASK_PAYER, ASK_PARTICIPANTS, CONFIRM_EXPENSE) = range(5)
+(ASK_DESCRIPTION, ASK_AMOUNT, ASK_PAYER, ASK_PARTICIPANTS) = range(4)
 
 # Settle Up conversation states
-(SETTLE_ASK_PAYER, SETTLE_ASK_RECEIVER, SETTLE_ASK_AMOUNT, SETTLE_CONFIRM) = range(4)
+(SETTLE_ASK_PAYER, SETTLE_ASK_RECEIVER, SETTLE_ASK_AMOUNT) = range(3)
 
 # context.user_data keys
 CONTEXT_DESCRIPTION  = "exp_description"
@@ -24,7 +24,6 @@ CONTEXT_PAYER        = "exp_payer"
 CONTEXT_PARTICIPANTS = "exp_participants"
 CONTEXT_SETTLE_PAYER = "settle_payer"
 CONTEXT_SETTLE_TO    = "settle_to"
-CONTEXT_SETTLE_AMT   = "settle_amount"
 
 
 class ExpensesCommandHandler:
@@ -58,10 +57,6 @@ class ExpensesCommandHandler:
                         CallbackQueryHandler(self.add_expense_toggle_participant, pattern='^exp_toggle:.+$'),
                         CallbackQueryHandler(self.add_expense_participants_done, pattern='^exp_participants_done$'),
                     ],
-                    CONFIRM_EXPENSE: [
-                        CallbackQueryHandler(self.add_expense_confirm_yes, pattern='^exp_confirm_yes$'),
-                        CallbackQueryHandler(self.add_expense_confirm_no, pattern='^exp_confirm_no$'),
-                    ],
                 },
                 fallbacks=[MessageHandler(Filters.command, self.cancel_add_expense)],
                 allow_reentry=True
@@ -78,10 +73,6 @@ class ExpensesCommandHandler:
                     ],
                     SETTLE_ASK_AMOUNT: [
                         MessageHandler(Filters.text & ~Filters.command, self.settle_amount)
-                    ],
-                    SETTLE_CONFIRM: [
-                        CallbackQueryHandler(self.settle_confirm_yes, pattern='^settle_confirm_yes$'),
-                        CallbackQueryHandler(self.settle_confirm_no, pattern='^settle_confirm_no$'),
                     ],
                 },
                 fallbacks=[MessageHandler(Filters.command, self.cancel_settle)],
@@ -206,50 +197,24 @@ class ExpensesCommandHandler:
             return ASK_PARTICIPANTS
         query.answer()
 
-        description = context.user_data[CONTEXT_DESCRIPTION]
-        amount      = context.user_data[CONTEXT_AMOUNT]
-        payer       = context.user_data[CONTEXT_PAYER]
+        description      = context.user_data[CONTEXT_DESCRIPTION]
+        amount           = context.user_data[CONTEXT_AMOUNT]
+        payer            = context.user_data[CONTEXT_PAYER]
         participants_list = sorted(selected)
-        share = amount / len(participants_list)
 
+        self._tracker.add_expense(description, amount, payer, participants_list)
+
+        share = amount / len(participants_list)
         summary = "\n".join([
+            emojize(f":check_mark_button: Expense saved!"),
             f"Description: {description}",
             f"Amount: \u20ac{amount:.2f}",
             f"Paid by: {payer}",
             f"Participants: {', '.join(participants_list)}",
             f"Each owes: \u20ac{share:.2f}",
-            "",
-            "Confirm?"
         ])
-        keyboard = [[
-            InlineKeyboardButton("Yes", callback_data='exp_confirm_yes'),
-            InlineKeyboardButton("No",  callback_data='exp_confirm_no'),
-        ]]
+        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
         query.edit_message_text(text=summary, reply_markup=InlineKeyboardMarkup(keyboard))
-        return CONFIRM_EXPENSE
-
-    def add_expense_confirm_yes(self, update: Update, context: CallbackContext) -> int:
-        query = update.callback_query
-        query.answer()
-        description  = context.user_data[CONTEXT_DESCRIPTION]
-        amount       = context.user_data[CONTEXT_AMOUNT]
-        payer        = context.user_data[CONTEXT_PAYER]
-        participants = sorted(context.user_data[CONTEXT_PARTICIPANTS])
-
-        self._tracker.add_expense(description, amount, payer, participants)
-
-        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
-        query.edit_message_text(
-            text=emojize(f":check_mark_button: Expense '{description}' (\u20ac{amount:.2f}) saved!"),
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return ConversationHandler.END
-
-    def add_expense_confirm_no(self, update: Update, context: CallbackContext) -> int:
-        query = update.callback_query
-        query.answer()
-        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
-        query.edit_message_text(text="Expense cancelled.", reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
 
     def cancel_add_expense(self, update: Update, context: CallbackContext) -> int:
@@ -263,7 +228,6 @@ class ExpensesCommandHandler:
         query.answer()
         context.user_data.pop(CONTEXT_SETTLE_PAYER, None)
         context.user_data.pop(CONTEXT_SETTLE_TO, None)
-        context.user_data.pop(CONTEXT_SETTLE_AMT, None)
 
         keyboard = [
             [InlineKeyboardButton(m, callback_data=f'settle_payer:{m}')]
@@ -307,41 +271,16 @@ class ExpensesCommandHandler:
             update.message.reply_text("Please enter a valid positive number (e.g. 15.00).")
             return SETTLE_ASK_AMOUNT
 
-        context.user_data[CONTEXT_SETTLE_AMT] = amount
         payer    = context.user_data[CONTEXT_SETTLE_PAYER]
         receiver = context.user_data[CONTEXT_SETTLE_TO]
-
-        keyboard = [[
-            InlineKeyboardButton("Yes", callback_data='settle_confirm_yes'),
-            InlineKeyboardButton("No",  callback_data='settle_confirm_no'),
-        ]]
-        update.message.reply_text(
-            text=f"{payer} pays {receiver} \u20ac{amount:.2f}\n\nConfirm?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return SETTLE_CONFIRM
-
-    def settle_confirm_yes(self, update: Update, context: CallbackContext) -> int:
-        query = update.callback_query
-        query.answer()
-        payer    = context.user_data[CONTEXT_SETTLE_PAYER]
-        receiver = context.user_data[CONTEXT_SETTLE_TO]
-        amount   = context.user_data[CONTEXT_SETTLE_AMT]
 
         self._tracker.add_settlement(payer, receiver, amount)
 
         keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
-        query.edit_message_text(
+        update.message.reply_text(
             text=emojize(f":check_mark_button: Settlement recorded: {payer} paid {receiver} \u20ac{amount:.2f}"),
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return ConversationHandler.END
-
-    def settle_confirm_no(self, update: Update, context: CallbackContext) -> int:
-        query = update.callback_query
-        query.answer()
-        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
-        query.edit_message_text(text="Settlement cancelled.", reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
 
     def cancel_settle(self, update: Update, context: CallbackContext) -> int:

@@ -12,7 +12,7 @@ from app.config import Config
 from app.expenses import ExpenseTracker
 
 # Add Expense conversation states
-(ASK_DESCRIPTION, ASK_AMOUNT, ASK_PAYER, ASK_PARTICIPANTS) = range(4)
+(ASK_DESCRIPTION, ASK_AMOUNT, ASK_PAYER, ASK_SPLIT_TYPE, ASK_PARTICIPANTS, ASK_PAID_FOR) = range(6)
 
 # Settle Up conversation states
 (SETTLE_ASK_PAYER, SETTLE_ASK_RECEIVER, SETTLE_ASK_AMOUNT) = range(3)
@@ -30,6 +30,8 @@ CONTEXT_DESCRIPTION  = "exp_description"
 CONTEXT_AMOUNT       = "exp_amount"
 CONTEXT_PAYER        = "exp_payer"
 CONTEXT_PARTICIPANTS = "exp_participants"
+CONTEXT_SPLIT_TYPE   = "exp_split_type"
+CONTEXT_PAID_FOR     = "exp_paid_for"
 CONTEXT_SETTLE_PAYER = "settle_payer"
 CONTEXT_SETTLE_TO    = "settle_to"
 CONTEXT_EDIT_ID      = "edit_expense_id"
@@ -63,9 +65,16 @@ class ExpensesCommandHandler:
                     ASK_PAYER: [
                         CallbackQueryHandler(self.add_expense_payer, pattern='^exp_payer:.+$')
                     ],
+                    ASK_SPLIT_TYPE: [
+                        CallbackQueryHandler(self.add_expense_split_equal, pattern='^exp_split:equal$'),
+                        CallbackQueryHandler(self.add_expense_split_payfor, pattern='^exp_split:payfor$'),
+                    ],
                     ASK_PARTICIPANTS: [
                         CallbackQueryHandler(self.add_expense_toggle_participant, pattern='^exp_toggle:.+$'),
                         CallbackQueryHandler(self.add_expense_participants_done, pattern='^exp_participants_done$'),
+                    ],
+                    ASK_PAID_FOR: [
+                        CallbackQueryHandler(self.add_expense_paid_for, pattern='^exp_payfor:.+$'),
                     ],
                 },
                 fallbacks=[MessageHandler(Filters.command, self.cancel_add_expense)],
@@ -177,6 +186,8 @@ class ExpensesCommandHandler:
         context.user_data.pop(CONTEXT_DESCRIPTION, None)
         context.user_data.pop(CONTEXT_AMOUNT, None)
         context.user_data.pop(CONTEXT_PAYER, None)
+        context.user_data.pop(CONTEXT_SPLIT_TYPE, None)
+        context.user_data.pop(CONTEXT_PAID_FOR, None)
         context.user_data[CONTEXT_PARTICIPANTS] = set()
 
         if not self._members:
@@ -218,7 +229,59 @@ class ExpensesCommandHandler:
         query.answer()
         context.user_data[CONTEXT_PAYER] = query.data.split(":", 1)[1]
         context.user_data[CONTEXT_PARTICIPANTS] = set()
+        keyboard = [
+            [InlineKeyboardButton(emojize(":people_with_bunny_ears: Equal split"), callback_data='exp_split:equal')],
+            [InlineKeyboardButton(emojize(":person_gesturing_OK: Pay for someone"), callback_data='exp_split:payfor')],
+        ]
+        query.edit_message_text(
+            text="How should this expense be split?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ASK_SPLIT_TYPE
+
+    def add_expense_split_equal(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        context.user_data[CONTEXT_SPLIT_TYPE] = 'equal'
         return self._show_participant_selector(query, context)
+
+    def add_expense_split_payfor(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        context.user_data[CONTEXT_SPLIT_TYPE] = 'payfor'
+        payer = context.user_data[CONTEXT_PAYER]
+        others = [m for m in self._members if m != payer]
+        keyboard = [
+            [InlineKeyboardButton(m, callback_data=f'exp_payfor:{m}')]
+            for m in others
+        ]
+        query.edit_message_text(
+            text=f"{payer} paid for whom?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ASK_PAID_FOR
+
+    def add_expense_paid_for(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        query.answer()
+        paid_for = query.data.split(":", 1)[1]
+        description = context.user_data[CONTEXT_DESCRIPTION]
+        amount      = context.user_data[CONTEXT_AMOUNT]
+        payer       = context.user_data[CONTEXT_PAYER]
+
+        self._tracker.add_expense(description, amount, payer, [paid_for])
+
+        summary = "\n".join([
+            emojize(":check_mark_button: Expense saved!"),
+            f"Description: {description}",
+            f"Amount: \u20ac{amount:.2f}",
+            f"Paid by: {payer}",
+            f"Paid for: {paid_for}",
+            f"{paid_for} owes: \u20ac{amount:.2f}",
+        ])
+        keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
+        query.edit_message_text(text=summary, reply_markup=InlineKeyboardMarkup(keyboard))
+        return ConversationHandler.END
 
     def _show_participant_selector(self, query, context: CallbackContext) -> int:
         selected: set = context.user_data.get(CONTEXT_PARTICIPANTS, set())
@@ -265,7 +328,7 @@ class ExpensesCommandHandler:
             f"Description: {description}",
             f"Amount: \u20ac{amount:.2f}",
             f"Paid by: {payer}",
-            f"Participants: {', '.join(participants_list)}",
+            f"Split among: {', '.join(participants_list)}",
             f"Each owes: \u20ac{share:.2f}",
         ])
         keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
@@ -371,14 +434,24 @@ class ExpensesCommandHandler:
         if not exp:
             query.edit_message_text("Expense not found.")
             return ConversationHandler.END
-        share = exp.amount / len(exp.participants) if exp.participants else 0
-        text = "\n".join([
-            f"Description: {exp.description}",
-            f"Amount: \u20ac{exp.amount:.2f}",
-            f"Paid by: {exp.paid_by}",
-            f"Participants: {', '.join(exp.participants)}",
-            f"Each owes: \u20ac{share:.2f}",
-        ])
+        is_pay_for = len(exp.participants) == 1 and exp.participants[0] != exp.paid_by
+        if is_pay_for:
+            text = "\n".join([
+                f"Description: {exp.description}",
+                f"Amount: \u20ac{exp.amount:.2f}",
+                f"Paid by: {exp.paid_by}",
+                f"Paid for: {exp.participants[0]}",
+                f"{exp.participants[0]} owes: \u20ac{exp.amount:.2f}",
+            ])
+        else:
+            share = exp.amount / len(exp.participants) if exp.participants else 0
+            text = "\n".join([
+                f"Description: {exp.description}",
+                f"Amount: \u20ac{exp.amount:.2f}",
+                f"Paid by: {exp.paid_by}",
+                f"Split among: {', '.join(exp.participants)}",
+                f"Each owes: \u20ac{share:.2f}",
+            ])
         keyboard = [
             [
                 InlineKeyboardButton("Edit",   callback_data=f'mexp_edit:{expense_id}'),
@@ -479,15 +552,26 @@ class ExpensesCommandHandler:
         payer        = context.user_data[CONTEXT_PAYER]
         participants = sorted(selected)
         self._tracker.update_expense(expense_id, description, amount, payer, participants)
-        share = amount / len(participants)
-        summary = "\n".join([
-            emojize(":check_mark_button: Expense updated!"),
-            f"Description: {description}",
-            f"Amount: \u20ac{amount:.2f}",
-            f"Paid by: {payer}",
-            f"Participants: {', '.join(participants)}",
-            f"Each owes: \u20ac{share:.2f}",
-        ])
+        is_pay_for = len(participants) == 1 and participants[0] != payer
+        if is_pay_for:
+            summary = "\n".join([
+                emojize(":check_mark_button: Expense updated!"),
+                f"Description: {description}",
+                f"Amount: \u20ac{amount:.2f}",
+                f"Paid by: {payer}",
+                f"Paid for: {participants[0]}",
+                f"{participants[0]} owes: \u20ac{amount:.2f}",
+            ])
+        else:
+            share = amount / len(participants)
+            summary = "\n".join([
+                emojize(":check_mark_button: Expense updated!"),
+                f"Description: {description}",
+                f"Amount: \u20ac{amount:.2f}",
+                f"Paid by: {payer}",
+                f"Split among: {', '.join(participants)}",
+                f"Each owes: \u20ac{share:.2f}",
+            ])
         keyboard = [[InlineKeyboardButton("Back to Expenses", callback_data='expenses')]]
         query.edit_message_text(text=summary, reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
